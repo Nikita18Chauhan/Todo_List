@@ -1,94 +1,89 @@
 import express from "express";
 import bodyParser from "body-parser";
-import pg from "pg";
-import axios from "axios";
+import pkg from "pg";
 import ejs from "ejs";
 import { fileURLToPath } from "url";
 import path from "path";
 import { dirname, join } from "path";
 import cors from "cors";
+import env from "dotenv";
+import { sql } from "@vercel/postgres";
+
+const { Pool } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-
-
-
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
+env.config();
 
-const db = new pg.Client({
-  user: "postgres",
-  host: "localhost",
-  database: "permalist",
-  password: "Nikita#",
-  port: 5432,
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL + "?sslmode=require",
 });
-db.connect();
 
-// app.use(bodyParser.urlencoded({ extended: true }));
-// app.use(express.static("public"));
+pool.connect()
+  .then(() => console.log('Connected to the database'))
+  .catch(err => console.error('Error connecting to the database', err));
 
 app.use(cors());
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
-// app.use(express.static('public'));
-app.use(express.static(__dirname + "/public/"));
 app.use(bodyParser.urlencoded({ extended: true }));
+// app.use(express.static("public"));
+app.use(express.static(__dirname + "/public/"));
 
-let items = [
-  { id: 1, title: "Buy milk" },
-  { id: 2, title: "Finish homework" },
-];
+let items;
 
 app.get("/", async (req, res) => {
   try {
-    const result = await db.query("SELECT * FROM items ORDER BY id ASC");
-    items = result.rows;
-
+    let allItems = await pool.query("SELECT * FROM items ORDER BY id ASC");
+    items = allItems.rows;
     res.render("index.ejs", {
       listTitle: "Today",
       listItems: items,
     });
-  } catch (err) {
-    console.log(err);
+  } catch (error) {
+    console.log("Error: ", error);
   }
 });
 
 app.post("/add", async (req, res) => {
   const item = req.body.newItem;
-  // items.push({title: item});
   try {
-    await db.query("INSERT INTO items (title) VALUES ($1)", [item]);
+    await pool.query("INSERT INTO items (title) VALUES ($1)", [item]);
     res.redirect("/");
-  } catch (err) {
-    console.log(err);
+  } catch (error) {
+    console.log("error : ", error);
   }
 });
 
 app.post("/edit", async (req, res) => {
   const item = req.body.updatedItemTitle;
   const id = req.body.updatedItemId;
-
   try {
-    await db.query("UPDATE items SET title = ($1) WHERE id = $2", [item, id]);
+    const edited = await pool.query(
+      "UPDATE items SET title = ($1) WHERE id = ($2)",
+      [item, id]
+    );
+    console.log(edited.rows);
     res.redirect("/");
-  } catch (err) {
-    console.log(err);
+  } catch (error) {
+    console.log("Error : ", error);
   }
 });
 
 app.post("/delete", async (req, res) => {
-  const id = req.body.deleteItemId;
+  const item = req.body.deleteItemId;
   try {
-    await db.query("DELETE FROM items WHERE id = $1", [id]);
+    await pool.query("DELETE FROM items WHERE id = $1", [item]);
     res.redirect("/");
-  } catch (err) {
-    console.log(err);
+  } catch (error) {
+    console.log("error: ", error);
   }
 });
 
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  console.log(Server running on port ${port});
 });
